@@ -1,0 +1,2416 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <style>
+      body {
+        margin: 0;
+      }
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+    <title>사당 점심지도</title>
+    <meta name="claude:viewport-fit-sides" content="cover" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap"
+    />
+
+    <style>
+      /* Layout: 왼쪽 지도 + 오른쪽 식권처럼 생긴 식당 목록, 폰에선 지도 위·목록 아래 */
+      :root {
+        --bg: #eef1ea;
+        --card: #fbfcf8;
+        --ink: #1c2420;
+        --muted: #5f6b63;
+        --line: #d5dbd0;
+        --accent: #1f6b4c;
+        --accent-ink: #ffffff;
+        --pick: #f0b93a;
+        --pick-ink: #2a2006;
+        --open: #2f8a57;
+        --closed: #b5452f;
+        --unknown: #8a8f86;
+        --sketch: #e3e8de;
+        --road: #ffffff;
+        --road-edge: #c3cbbf;
+        --display:
+          "Do Hyeon", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+        --body:
+          "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui,
+          sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #121815;
+          --card: #1a221e;
+          --ink: #e7ece6;
+          --muted: #9aa69e;
+          --line: #2c3731;
+          --accent: #5cc493;
+          --accent-ink: #0d1a13;
+          --pick: #f0b93a;
+          --pick-ink: #2a2006;
+          --open: #5cc493;
+          --closed: #ec7a5f;
+          --unknown: #8a948d;
+          --sketch: #18201c;
+          --road: #34413a;
+          --road-edge: #26302b;
+          color-scheme: dark;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #121815;
+        --card: #1a221e;
+        --ink: #e7ece6;
+        --muted: #9aa69e;
+        --line: #2c3731;
+        --accent: #5cc493;
+        --accent-ink: #0d1a13;
+        --pick: #f0b93a;
+        --pick-ink: #2a2006;
+        --open: #5cc493;
+        --closed: #ec7a5f;
+        --unknown: #8a948d;
+        --sketch: #18201c;
+        --road: #34413a;
+        --road-edge: #26302b;
+        color-scheme: dark;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--body);
+        font-size: 15px;
+        line-height: 1.5;
+      }
+      .wrap {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        padding-left: max(16px, env(safe-area-inset-left, 0px));
+        padding-right: max(16px, env(safe-area-inset-right, 0px));
+        padding-block: 14px;
+        gap: 12px;
+        box-sizing: border-box;
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      h1 {
+        font-family: var(--display);
+        font-weight: 400;
+        font-size: 2rem;
+        line-height: 1;
+        margin: 0;
+        letter-spacing: -0.01em;
+      }
+      .sub {
+        color: var(--muted);
+        font-size: 0.85rem;
+        margin-top: 4px;
+      }
+      .pickbtn {
+        font-family: var(--display);
+        font-size: 1.15rem;
+        border: 0;
+        border-radius: 999px;
+        padding: 10px 20px;
+        background: var(--pick);
+        color: var(--pick-ink);
+        cursor: pointer;
+        box-shadow: 0 2px 0 rgba(0, 0, 0, 0.18);
+      }
+      .pickbtn:active {
+        transform: translateY(1px);
+        box-shadow: none;
+      }
+      .pickbtn:focus-visible,
+      .chip:focus-visible,
+      .item:focus-visible,
+      .mapbtn:focus-visible,
+      select:focus-visible,
+      label:focus-within {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+      .chip {
+        font: 500 0.85rem var(--body);
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: var(--ink);
+        border-radius: 999px;
+        padding: 5px 12px;
+        cursor: pointer;
+      }
+      .chip[aria-pressed="true"] {
+        background: var(--accent);
+        color: var(--accent-ink);
+        border-color: var(--accent);
+      }
+      .toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.85rem;
+        color: var(--muted);
+        margin-left: auto;
+        border-radius: 6px;
+      }
+      .toggle input {
+        accent-color: var(--accent);
+      }
+
+      .main {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr);
+        gap: 14px;
+      }
+      .mapbox {
+        position: relative;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        overflow: hidden;
+        min-height: 0;
+        background: var(--card);
+      }
+      #map {
+        position: absolute;
+        inset: 0;
+        background: var(--line);
+      }
+      .tilenote {
+        position: absolute;
+        left: 10px;
+        right: 10px;
+        bottom: 24px;
+        z-index: 1100;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 0.8rem;
+        color: var(--muted);
+      }
+      .mapbtn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1100;
+        font: 500 0.8rem var(--body);
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: var(--ink);
+        border-radius: 999px;
+        padding: 5px 12px;
+        cursor: pointer;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+      }
+      .mapbtn[aria-pressed="true"] {
+        background: var(--accent);
+        color: var(--accent-ink);
+        border-color: var(--accent);
+      }
+      .list {
+        overflow-y: auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding-right: 2px;
+      }
+      .count {
+        font-size: 0.8rem;
+        color: var(--muted);
+      }
+
+      .item {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        cursor: pointer;
+        text-align: left;
+        color: inherit;
+        font: inherit;
+        width: 100%;
+        position: relative;
+      }
+      .item::before,
+      .item::after {
+        content: "";
+        position: absolute;
+        right: 66px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--bg);
+        border: 1px solid var(--line);
+      }
+      .item::before {
+        top: -7px;
+      }
+      .item::after {
+        bottom: -7px;
+      }
+      .item.active {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px var(--accent) inset;
+      }
+      .item.picked {
+        border-color: var(--pick);
+        box-shadow: 0 0 0 3px var(--pick) inset;
+      }
+      .dot {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        font-family: var(--display);
+        font-size: 0.95rem;
+        color: #fff;
+      }
+      .name {
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .meta {
+        font-size: 0.8rem;
+        color: var(--muted);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+      }
+      .state {
+        font-weight: 500;
+      }
+      .state.open {
+        color: var(--open);
+      }
+      .state.closed {
+        color: var(--closed);
+      }
+      .state.unknown {
+        color: var(--unknown);
+      }
+      .bud {
+        font-weight: 500;
+        font-size: 0.75rem;
+        padding: 0 7px;
+        border-radius: 999px;
+        border: 1px solid currentColor;
+      }
+      .bud.in {
+        color: var(--open);
+      }
+      .bud.edge {
+        color: var(--pick);
+      }
+      .bud.over {
+        color: var(--closed);
+      }
+      .walkset {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+      }
+      .chip.sm {
+        font-size: 0.78rem;
+        padding: 3px 9px;
+      }
+      .walk {
+        font-family: var(--display);
+        font-size: 1.25rem;
+        text-align: right;
+        line-height: 1;
+        padding-left: 14px;
+        border-left: 1px dashed var(--line);
+        font-variant-numeric: tabular-nums;
+        min-width: 48px;
+      }
+      .walk small {
+        display: block;
+        font-family: var(--body);
+        font-size: 0.7rem;
+        color: var(--muted);
+        margin-top: 2px;
+      }
+
+      /* 마커 */
+      .pin {
+        width: 28px;
+        height: 28px;
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        border: 2px solid #fff;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+        display: grid;
+        place-items: center;
+      }
+      .pin span {
+        transform: rotate(45deg);
+        color: #fff;
+        font-family: var(--display);
+        font-size: 0.8rem;
+      }
+      .pin.big {
+        width: 38px;
+        height: 38px;
+        outline: 3px solid var(--pick);
+      }
+      .office {
+        width: 34px;
+        height: 34px;
+        border-radius: 9px;
+        background: var(--ink);
+        color: var(--bg);
+        display: grid;
+        place-items: center;
+        font-family: var(--display);
+        font-size: 0.85rem;
+        border: 2px solid var(--pick);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+      }
+      .pop h3 {
+        font-family: var(--display);
+        font-weight: 400;
+        font-size: 1.2rem;
+        margin: 0 0 2px;
+      }
+      .pop p {
+        margin: 2px 0;
+        font-size: 0.82rem;
+      }
+      .pop .links {
+        display: flex;
+        gap: 10px;
+        margin-top: 6px;
+        flex-wrap: wrap;
+      }
+      .pop a {
+        color: var(--accent);
+        font-weight: 700;
+        font-size: 0.82rem;
+      }
+
+      @media (max-width: 760px) {
+        .wrap {
+          height: auto;
+          min-height: 100%;
+        }
+        .main {
+          grid-template-columns: 1fr;
+        }
+        .mapbox {
+          height: 46vh;
+          min-height: 280px;
+        }
+        .list {
+          overflow: visible;
+        }
+        .toggle {
+          margin-left: 0;
+        }
+        h1 {
+          font-size: 1.7rem;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          transition: none !important;
+          animation: none !important;
+        }
+      }
+
+      /* Leaflet 1.9.4 공식 CSS 전체 */
+      /* required styles */
+
+      .leaflet-pane,
+      .leaflet-tile,
+      .leaflet-marker-icon,
+      .leaflet-marker-shadow,
+      .leaflet-tile-container,
+      .leaflet-pane > svg,
+      .leaflet-pane > canvas,
+      .leaflet-zoom-box,
+      .leaflet-image-layer,
+      .leaflet-layer {
+        position: absolute;
+        left: 0;
+        top: 0;
+      }
+      .leaflet-container {
+        overflow: hidden;
+      }
+      .leaflet-tile,
+      .leaflet-marker-icon,
+      .leaflet-marker-shadow {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        user-select: none;
+        -webkit-user-drag: none;
+      }
+      /* Prevents IE11 from highlighting tiles in blue */
+      .leaflet-tile::selection {
+        background: transparent;
+      }
+      /* Safari renders non-retina tile on retina better with this, but Chrome is worse */
+      .leaflet-safari .leaflet-tile {
+        image-rendering: -webkit-optimize-contrast;
+      }
+      /* hack that prevents hw layers "stretching" when loading new tiles */
+      .leaflet-safari .leaflet-tile-container {
+        width: 1600px;
+        height: 1600px;
+        -webkit-transform-origin: 0 0;
+      }
+      .leaflet-marker-icon,
+      .leaflet-marker-shadow {
+        display: block;
+      }
+      /* .leaflet-container svg: reset svg max-width decleration shipped in Joomla! (joomla.org) 3.x */
+      /* .leaflet-container img: map is broken in FF if you have max-width: 100% on tiles */
+      .leaflet-container .leaflet-overlay-pane svg {
+        max-width: none !important;
+        max-height: none !important;
+      }
+      .leaflet-container .leaflet-marker-pane img,
+      .leaflet-container .leaflet-shadow-pane img,
+      .leaflet-container .leaflet-tile-pane img,
+      .leaflet-container img.leaflet-image-layer,
+      .leaflet-container .leaflet-tile {
+        max-width: none !important;
+        max-height: none !important;
+        width: auto;
+        padding: 0;
+      }
+
+      .leaflet-container img.leaflet-tile {
+        /* See: https://bugs.chromium.org/p/chromium/issues/detail?id=600120 */
+        mix-blend-mode: plus-lighter;
+      }
+
+      .leaflet-container.leaflet-touch-zoom {
+        -ms-touch-action: pan-x pan-y;
+        touch-action: pan-x pan-y;
+      }
+      .leaflet-container.leaflet-touch-drag {
+        -ms-touch-action: pinch-zoom;
+        /* Fallback for FF which doesn't support pinch-zoom */
+        touch-action: none;
+        touch-action: pinch-zoom;
+      }
+      .leaflet-container.leaflet-touch-drag.leaflet-touch-zoom {
+        -ms-touch-action: none;
+        touch-action: none;
+      }
+      .leaflet-container {
+        -webkit-tap-highlight-color: transparent;
+      }
+      .leaflet-container a {
+        -webkit-tap-highlight-color: rgba(51, 181, 229, 0.4);
+      }
+      .leaflet-tile {
+        filter: inherit;
+        visibility: hidden;
+      }
+      .leaflet-tile-loaded {
+        visibility: inherit;
+      }
+      .leaflet-zoom-box {
+        width: 0;
+        height: 0;
+        -moz-box-sizing: border-box;
+        box-sizing: border-box;
+        z-index: 800;
+      }
+      /* workaround for https://bugzilla.mozilla.org/show_bug.cgi?id=888319 */
+      .leaflet-overlay-pane svg {
+        -moz-user-select: none;
+      }
+
+      .leaflet-pane {
+        z-index: 400;
+      }
+
+      .leaflet-tile-pane {
+        z-index: 200;
+      }
+      .leaflet-overlay-pane {
+        z-index: 400;
+      }
+      .leaflet-shadow-pane {
+        z-index: 500;
+      }
+      .leaflet-marker-pane {
+        z-index: 600;
+      }
+      .leaflet-tooltip-pane {
+        z-index: 650;
+      }
+      .leaflet-popup-pane {
+        z-index: 700;
+      }
+
+      .leaflet-map-pane canvas {
+        z-index: 100;
+      }
+      .leaflet-map-pane svg {
+        z-index: 200;
+      }
+
+      .leaflet-vml-shape {
+        width: 1px;
+        height: 1px;
+      }
+      .lvml {
+        behavior: none;
+        display: inline-block;
+        position: absolute;
+      }
+
+      /* control positioning */
+
+      .leaflet-control {
+        position: relative;
+        z-index: 800;
+        pointer-events: visiblePainted; /* IE 9-10 doesn't have auto */
+        pointer-events: auto;
+      }
+      .leaflet-top,
+      .leaflet-bottom {
+        position: absolute;
+        z-index: 1000;
+        pointer-events: none;
+      }
+      .leaflet-top {
+        top: 0;
+      }
+      .leaflet-right {
+        right: 0;
+      }
+      .leaflet-bottom {
+        bottom: 0;
+      }
+      .leaflet-left {
+        left: 0;
+      }
+      .leaflet-control {
+        float: left;
+        clear: both;
+      }
+      .leaflet-right .leaflet-control {
+        float: right;
+      }
+      .leaflet-top .leaflet-control {
+        margin-top: 10px;
+      }
+      .leaflet-bottom .leaflet-control {
+        margin-bottom: 10px;
+      }
+      .leaflet-left .leaflet-control {
+        margin-left: 10px;
+      }
+      .leaflet-right .leaflet-control {
+        margin-right: 10px;
+      }
+
+      /* zoom and fade animations */
+
+      .leaflet-fade-anim .leaflet-popup {
+        opacity: 0;
+        -webkit-transition: opacity 0.2s linear;
+        -moz-transition: opacity 0.2s linear;
+        transition: opacity 0.2s linear;
+      }
+      .leaflet-fade-anim .leaflet-map-pane .leaflet-popup {
+        opacity: 1;
+      }
+      .leaflet-zoom-animated {
+        -webkit-transform-origin: 0 0;
+        -ms-transform-origin: 0 0;
+        transform-origin: 0 0;
+      }
+      svg.leaflet-zoom-animated {
+        will-change: transform;
+      }
+
+      .leaflet-zoom-anim .leaflet-zoom-animated {
+        -webkit-transition: -webkit-transform 0.25s cubic-bezier(0, 0, 0.25, 1);
+        -moz-transition: -moz-transform 0.25s cubic-bezier(0, 0, 0.25, 1);
+        transition: transform 0.25s cubic-bezier(0, 0, 0.25, 1);
+      }
+      .leaflet-zoom-anim .leaflet-tile,
+      .leaflet-pan-anim .leaflet-tile {
+        -webkit-transition: none;
+        -moz-transition: none;
+        transition: none;
+      }
+
+      .leaflet-zoom-anim .leaflet-zoom-hide {
+        visibility: hidden;
+      }
+
+      /* cursors */
+
+      .leaflet-interactive {
+        cursor: pointer;
+      }
+      .leaflet-grab {
+        cursor: -webkit-grab;
+        cursor: -moz-grab;
+        cursor: grab;
+      }
+      .leaflet-crosshair,
+      .leaflet-crosshair .leaflet-interactive {
+        cursor: crosshair;
+      }
+      .leaflet-popup-pane,
+      .leaflet-control {
+        cursor: auto;
+      }
+      .leaflet-dragging .leaflet-grab,
+      .leaflet-dragging .leaflet-grab .leaflet-interactive,
+      .leaflet-dragging .leaflet-marker-draggable {
+        cursor: move;
+        cursor: -webkit-grabbing;
+        cursor: -moz-grabbing;
+        cursor: grabbing;
+      }
+
+      /* marker & overlays interactivity */
+      .leaflet-marker-icon,
+      .leaflet-marker-shadow,
+      .leaflet-image-layer,
+      .leaflet-pane > svg path,
+      .leaflet-tile-container {
+        pointer-events: none;
+      }
+
+      .leaflet-marker-icon.leaflet-interactive,
+      .leaflet-image-layer.leaflet-interactive,
+      .leaflet-pane > svg path.leaflet-interactive,
+      svg.leaflet-image-layer.leaflet-interactive path {
+        pointer-events: visiblePainted; /* IE 9-10 doesn't have auto */
+        pointer-events: auto;
+      }
+
+      /* visual tweaks */
+
+      .leaflet-container {
+        background: #ddd;
+        outline-offset: 1px;
+      }
+      .leaflet-container a {
+        color: #0078a8;
+      }
+      .leaflet-zoom-box {
+        border: 2px dotted #38f;
+        background: rgba(255, 255, 255, 0.5);
+      }
+
+      /* general typography */
+      .leaflet-container {
+        font-family: "Helvetica Neue", Arial, Helvetica, sans-serif;
+        font-size: 12px;
+        font-size: 0.75rem;
+        line-height: 1.5;
+      }
+
+      /* general toolbar styles */
+
+      .leaflet-bar {
+        box-shadow: 0 1px 5px rgba(0, 0, 0, 0.65);
+        border-radius: 4px;
+      }
+      .leaflet-bar a {
+        background-color: #fff;
+        border-bottom: 1px solid #ccc;
+        width: 26px;
+        height: 26px;
+        line-height: 26px;
+        display: block;
+        text-align: center;
+        text-decoration: none;
+        color: black;
+      }
+      .leaflet-bar a,
+      .leaflet-control-layers-toggle {
+        background-position: 50% 50%;
+        background-repeat: no-repeat;
+        display: block;
+      }
+      .leaflet-bar a:hover,
+      .leaflet-bar a:focus {
+        background-color: #f4f4f4;
+      }
+      .leaflet-bar a:first-child {
+        border-top-left-radius: 4px;
+        border-top-right-radius: 4px;
+      }
+      .leaflet-bar a:last-child {
+        border-bottom-left-radius: 4px;
+        border-bottom-right-radius: 4px;
+        border-bottom: none;
+      }
+      .leaflet-bar a.leaflet-disabled {
+        cursor: default;
+        background-color: #f4f4f4;
+        color: #bbb;
+      }
+
+      .leaflet-touch .leaflet-bar a {
+        width: 30px;
+        height: 30px;
+        line-height: 30px;
+      }
+      .leaflet-touch .leaflet-bar a:first-child {
+        border-top-left-radius: 2px;
+        border-top-right-radius: 2px;
+      }
+      .leaflet-touch .leaflet-bar a:last-child {
+        border-bottom-left-radius: 2px;
+        border-bottom-right-radius: 2px;
+      }
+
+      /* zoom control */
+
+      .leaflet-control-zoom-in,
+      .leaflet-control-zoom-out {
+        font:
+          bold 18px "Lucida Console",
+          Monaco,
+          monospace;
+        text-indent: 1px;
+      }
+
+      .leaflet-touch .leaflet-control-zoom-in,
+      .leaflet-touch .leaflet-control-zoom-out {
+        font-size: 22px;
+      }
+
+      /* layers control */
+
+      .leaflet-control-layers {
+        box-shadow: 0 1px 5px rgba(0, 0, 0, 0.4);
+        background: #fff;
+        border-radius: 5px;
+      }
+      .leaflet-control-layers-toggle {
+        background-image: none;
+        width: 36px;
+        height: 36px;
+      }
+      .leaflet-retina .leaflet-control-layers-toggle {
+        background-image: none;
+        background-size: 26px 26px;
+      }
+      .leaflet-touch .leaflet-control-layers-toggle {
+        width: 44px;
+        height: 44px;
+      }
+      .leaflet-control-layers .leaflet-control-layers-list,
+      .leaflet-control-layers-expanded .leaflet-control-layers-toggle {
+        display: none;
+      }
+      .leaflet-control-layers-expanded .leaflet-control-layers-list {
+        display: block;
+        position: relative;
+      }
+      .leaflet-control-layers-expanded {
+        padding: 6px 10px 6px 6px;
+        color: #333;
+        background: #fff;
+      }
+      .leaflet-control-layers-scrollbar {
+        overflow-y: scroll;
+        overflow-x: hidden;
+        padding-right: 5px;
+      }
+      .leaflet-control-layers-selector {
+        margin-top: 2px;
+        position: relative;
+        top: 1px;
+      }
+      .leaflet-control-layers label {
+        display: block;
+        font-size: 13px;
+        font-size: 1.08333em;
+      }
+      .leaflet-control-layers-separator {
+        height: 0;
+        border-top: 1px solid #ddd;
+        margin: 5px -10px 5px -6px;
+      }
+
+      /* Default icon URLs */
+      .leaflet-default-icon-path {
+        /* used only in path-guessing heuristic, see L.Icon.Default */
+        background-image: none;
+      }
+
+      /* attribution and scale controls */
+
+      .leaflet-container .leaflet-control-attribution {
+        background: #fff;
+        background: rgba(255, 255, 255, 0.8);
+        margin: 0;
+      }
+      .leaflet-control-attribution,
+      .leaflet-control-scale-line {
+        padding: 0 5px;
+        color: #333;
+        line-height: 1.4;
+      }
+      .leaflet-control-attribution a {
+        text-decoration: none;
+      }
+      .leaflet-control-attribution a:hover,
+      .leaflet-control-attribution a:focus {
+        text-decoration: underline;
+      }
+      .leaflet-attribution-flag {
+        display: inline !important;
+        vertical-align: baseline !important;
+        width: 1em;
+        height: 0.6669em;
+      }
+      .leaflet-left .leaflet-control-scale {
+        margin-left: 5px;
+      }
+      .leaflet-bottom .leaflet-control-scale {
+        margin-bottom: 5px;
+      }
+      .leaflet-control-scale-line {
+        border: 2px solid #777;
+        border-top: none;
+        line-height: 1.1;
+        padding: 2px 5px 1px;
+        white-space: nowrap;
+        -moz-box-sizing: border-box;
+        box-sizing: border-box;
+        background: rgba(255, 255, 255, 0.8);
+        text-shadow: 1px 1px #fff;
+      }
+      .leaflet-control-scale-line:not(:first-child) {
+        border-top: 2px solid #777;
+        border-bottom: none;
+        margin-top: -2px;
+      }
+      .leaflet-control-scale-line:not(:first-child):not(:last-child) {
+        border-bottom: 2px solid #777;
+      }
+
+      .leaflet-touch .leaflet-control-attribution,
+      .leaflet-touch .leaflet-control-layers,
+      .leaflet-touch .leaflet-bar {
+        box-shadow: none;
+      }
+      .leaflet-touch .leaflet-control-layers,
+      .leaflet-touch .leaflet-bar {
+        border: 2px solid rgba(0, 0, 0, 0.2);
+        background-clip: padding-box;
+      }
+
+      /* popup */
+
+      .leaflet-popup {
+        position: absolute;
+        text-align: center;
+        margin-bottom: 20px;
+      }
+      .leaflet-popup-content-wrapper {
+        padding: 1px;
+        text-align: left;
+        border-radius: 12px;
+      }
+      .leaflet-popup-content {
+        margin: 13px 24px 13px 20px;
+        line-height: 1.3;
+        font-size: 13px;
+        font-size: 1.08333em;
+        min-height: 1px;
+      }
+      .leaflet-popup-content p {
+        margin: 17px 0;
+        margin: 1.3em 0;
+      }
+      .leaflet-popup-tip-container {
+        width: 40px;
+        height: 20px;
+        position: absolute;
+        left: 50%;
+        margin-top: -1px;
+        margin-left: -20px;
+        overflow: hidden;
+        pointer-events: none;
+      }
+      .leaflet-popup-tip {
+        width: 17px;
+        height: 17px;
+        padding: 1px;
+
+        margin: -10px auto 0;
+        pointer-events: auto;
+
+        -webkit-transform: rotate(45deg);
+        -moz-transform: rotate(45deg);
+        -ms-transform: rotate(45deg);
+        transform: rotate(45deg);
+      }
+      .leaflet-popup-content-wrapper,
+      .leaflet-popup-tip {
+        background: white;
+        color: #333;
+        box-shadow: 0 3px 14px rgba(0, 0, 0, 0.4);
+      }
+      .leaflet-container a.leaflet-popup-close-button {
+        position: absolute;
+        top: 0;
+        right: 0;
+        border: none;
+        text-align: center;
+        width: 24px;
+        height: 24px;
+        font:
+          16px/24px Tahoma,
+          Verdana,
+          sans-serif;
+        color: #757575;
+        text-decoration: none;
+        background: transparent;
+      }
+      .leaflet-container a.leaflet-popup-close-button:hover,
+      .leaflet-container a.leaflet-popup-close-button:focus {
+        color: #585858;
+      }
+      .leaflet-popup-scrolled {
+        overflow: auto;
+      }
+
+      .leaflet-oldie .leaflet-popup-content-wrapper {
+        -ms-zoom: 1;
+      }
+      .leaflet-oldie .leaflet-popup-tip {
+        width: 24px;
+        margin: 0 auto;
+
+        -ms-filter: "progid:DXImageTransform.Microsoft.Matrix(M11=0.70710678, M12=0.70710678, M21=-0.70710678, M22=0.70710678)";
+        filter: progid:DXImageTransform.Microsoft.Matrix(M11=0.70710678, M12=0.70710678, M21=-0.70710678, M22=0.70710678);
+      }
+
+      .leaflet-oldie .leaflet-control-zoom,
+      .leaflet-oldie .leaflet-control-layers,
+      .leaflet-oldie .leaflet-popup-content-wrapper,
+      .leaflet-oldie .leaflet-popup-tip {
+        border: 1px solid #999;
+      }
+
+      /* div icon */
+
+      .leaflet-div-icon {
+        background: #fff;
+        border: 1px solid #666;
+      }
+
+      /* Tooltip */
+      /* Base styles for the element that has a tooltip */
+      .leaflet-tooltip {
+        position: absolute;
+        padding: 6px;
+        background-color: #fff;
+        border: 1px solid #fff;
+        border-radius: 3px;
+        color: #222;
+        white-space: nowrap;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+        pointer-events: none;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+      }
+      .leaflet-tooltip.leaflet-interactive {
+        cursor: pointer;
+        pointer-events: auto;
+      }
+      .leaflet-tooltip-top:before,
+      .leaflet-tooltip-bottom:before,
+      .leaflet-tooltip-left:before,
+      .leaflet-tooltip-right:before {
+        position: absolute;
+        pointer-events: none;
+        border: 6px solid transparent;
+        background: transparent;
+        content: "";
+      }
+
+      /* Directions */
+
+      .leaflet-tooltip-bottom {
+        margin-top: 6px;
+      }
+      .leaflet-tooltip-top {
+        margin-top: -6px;
+      }
+      .leaflet-tooltip-bottom:before,
+      .leaflet-tooltip-top:before {
+        left: 50%;
+        margin-left: -6px;
+      }
+      .leaflet-tooltip-top:before {
+        bottom: 0;
+        margin-bottom: -12px;
+        border-top-color: #fff;
+      }
+      .leaflet-tooltip-bottom:before {
+        top: 0;
+        margin-top: -12px;
+        margin-left: -6px;
+        border-bottom-color: #fff;
+      }
+      .leaflet-tooltip-left {
+        margin-left: -6px;
+      }
+      .leaflet-tooltip-right {
+        margin-left: 6px;
+      }
+      .leaflet-tooltip-left:before,
+      .leaflet-tooltip-right:before {
+        top: 50%;
+        margin-top: -6px;
+      }
+      .leaflet-tooltip-left:before {
+        right: 0;
+        margin-right: -12px;
+        border-left-color: #fff;
+      }
+      .leaflet-tooltip-right:before {
+        left: 0;
+        margin-left: -12px;
+        border-right-color: #fff;
+      }
+
+      /* Printing */
+
+      @media print {
+        /* Prevent printers from removing background-images of controls. */
+        .leaflet-control {
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+      }
+
+      /* 테마 맞춤 */
+      .leaflet-container {
+        font-family: var(--body);
+        background: var(--line);
+      }
+      .leaflet-bar a,
+      .leaflet-bar a:hover {
+        background: var(--card);
+        color: var(--ink);
+        border-bottom-color: var(--line);
+      }
+      .leaflet-popup-content-wrapper,
+      .leaflet-popup-tip {
+        background: var(--card);
+        color: var(--ink);
+      }
+      .leaflet-popup-content {
+        margin: 12px 26px 12px 14px;
+      }
+      .leaflet-container a.leaflet-popup-close-button {
+        color: var(--muted);
+      }
+      .leaflet-div-icon {
+        background: none;
+        border: 0;
+      }
+      #map.sketch {
+        background: var(--sketch);
+      }
+      .road-label {
+        font: 500 11px var(--body);
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .stn {
+        font: 700 11px var(--body);
+        color: var(--accent-ink);
+        background: var(--accent);
+        border-radius: 999px;
+        padding: 2px 8px;
+        white-space: nowrap;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+        display: inline-block;
+        transform: translate(-50%, -50%);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) .leaflet-tile-pane {
+          filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9);
+        }
+      }
+      :root[data-theme="dark"] .leaflet-tile-pane {
+        filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div>
+          <h1>사당 점심지도</h1>
+          <div class="sub">
+            한국소프트웨어서비스 · 사당로 276 성보빌딩 기준 · 인당 12,000원 ·
+            도보 시간은 직선거리로 잡은 추정치
+          </div>
+        </div>
+        <button class="pickbtn" id="pick" type="button">
+          오늘 점심 골라줘
+        </button>
+      </header>
+
+      <div
+        class="controls"
+        id="chips"
+        role="group"
+        aria-label="음식 종류"
+      ></div>
+
+      <div class="main">
+        <div class="mapbox">
+          <div id="map" aria-label="회사 주변 식당 지도"></div>
+          <button
+            class="mapbtn"
+            id="sketchBtn"
+            type="button"
+            aria-pressed="false"
+          >
+            간이 약도로 보기
+          </button>
+          <div class="tilenote" id="tilenote" hidden>
+            지도 이미지를 못 불러와서 간이 약도로 보여주는 중. 핀 위치는
+            정확하고 도로·역은 대략이야. 길 찾기는 핀 눌러서
+            네이버지도/카카오맵으로.
+          </div>
+        </div>
+        <div class="list" id="listwrap">
+          <div class="controls">
+            <span class="count" id="count"></span>
+            <span
+              class="walkset"
+              id="walkset"
+              role="group"
+              aria-label="도보 시간"
+            ></span>
+            <label class="toggle"
+              ><input type="checkbox" id="budgetOnly" checked /> 12,000원
+              안쪽만</label
+            >
+            <label class="toggle" style="margin-left: 0"
+              ><input type="checkbox" id="openOnly" /> 지금 영업중만</label
+            >
+          </div>
+          <div
+            id="list"
+            style="display: flex; flex-direction: column; gap: 8px"
+          ></div>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script>
+      const OFFICE = { lat: 37.483812, lng: 126.9784034 };
+
+      const CATS = {
+        "국밥·한식": "#b5452f",
+        중식: "#c0392b",
+        일식: "#2f5d8a",
+        분식: "#d98a1c",
+        패스트푸드: "#0f8b8d",
+        베트남: "#2f8a57",
+        샐러드: "#6a9f2a",
+        고기: "#7a3b2e",
+        양식: "#6a4c93",
+      };
+      const CAT_SHORT = {
+        "국밥·한식": "한",
+        중식: "중",
+        일식: "일",
+        분식: "분",
+        패스트푸드: "패",
+        베트남: "쌀",
+        샐러드: "샐",
+        고기: "고",
+        양식: "양",
+      };
+
+      // hours: [일,월,화,수,목,금,토]  "HH:MM-HH:MM" | "24h" | "휴무" | null(정보 없음)
+      const W = (s) => [s, s, s, s, s, s, s];
+      const R = [
+        {
+          n: "국밥장인",
+          c: "국밥·한식",
+          lat: 37.4841725,
+          lng: 126.9793871,
+          menu: "소고기국밥, 미나리곰탕",
+          note: "맑은 국물 국밥. 셀프서비스.",
+          h: null,
+          tel: null,
+        },
+        {
+          n: "육전국밥 이수역점",
+          c: "국밥·한식",
+          lat: 37.4842688,
+          lng: 126.9816861,
+          menu: "육전국밥, 막국수, 김치전",
+          note: "24시간. 점심엔 직장인 많고 혼밥하기 편함.",
+          h: W("24h"),
+          tel: "02-522-0325",
+        },
+        {
+          n: "청와옥 사당직영점",
+          c: "국밥·한식",
+          lat: 37.4828441,
+          lng: 126.9815788,
+          menu: "순대국",
+          note: "좌석 넉넉한 순대국 체인. 점심 피크엔 대기 있음.",
+          h: W("08:00-22:00"),
+          tel: "02-588-0885",
+        },
+        {
+          n: "청담동순도리 사당점",
+          c: "국밥·한식",
+          lat: 37.4782487,
+          lng: 126.9822657,
+          menu: "순대국, 육개장칼국수, 닭도리탕",
+          note: "사당역 11번 출구 앞, 24시간.",
+          h: W("24h"),
+          tel: null,
+        },
+        {
+          n: "진담식당",
+          c: "고기",
+          lat: 37.484087,
+          lng: 126.9718589,
+          menu: "찌개, 육회, 숙성 삼겹살",
+          note: "남성역 쪽. 점심엔 찌개류 위주로.",
+          h: W("12:00-23:00"),
+          tel: "02-6264-1030",
+        },
+        {
+          n: "화설 이수점",
+          c: "고기",
+          lat: 37.4862562,
+          lng: 126.9812068,
+          menu: "한우구이",
+          note: "가격대 높은 편. 회식·손님 접대용.",
+          h: [
+            "11:30-23:00",
+            "11:30-15:00",
+            "11:30-15:00",
+            "11:30-15:00",
+            "11:30-15:00",
+            "11:30-15:00",
+            "11:30-23:00",
+          ],
+          tel: "02-6956-9934",
+        },
+        {
+          n: "코시 이수점",
+          c: "일식",
+          lat: 37.4844319,
+          lng: 126.9804651,
+          menu: "붓카케우동, 돈카츠 세트",
+          note: "직접 뽑은 면 우동. 혼밥석 있음, 회전 빠름.",
+          h: null,
+          tel: "02-588-3723",
+        },
+        {
+          n: "스시로로",
+          c: "일식",
+          lat: 37.4840855,
+          lng: 126.9801014,
+          menu: "초밥, 카이센동",
+          note: "가성비 초밥. 늘 붐비니 일찍 가기.",
+          h: [
+            "11:30-22:00",
+            "휴무",
+            "11:30-22:00",
+            "11:30-22:00",
+            "11:30-22:00",
+            "11:30-22:00",
+            "11:30-22:00",
+          ],
+          tel: "02-585-1015",
+        },
+        {
+          n: "경성모밀",
+          c: "일식",
+          lat: 37.4882284,
+          lng: 126.9814285,
+          menu: "모밀 + 돈까스 세트",
+          note: "점심만 영업. 오픈 직후에도 줄 섬.",
+          h: [
+            "휴무",
+            "11:30-15:00",
+            "11:30-15:00",
+            "휴무",
+            "11:30-15:00",
+            "11:30-15:00",
+            "11:30-15:00",
+          ],
+          tel: "02-532-6670",
+        },
+        {
+          n: "이수짜장",
+          c: "중식",
+          lat: 37.4883322,
+          lng: 126.9811376,
+          menu: "짜장면, 삼선짬뽕",
+          note: "시장 근처 동네 중국집. 양 많음.",
+          h: W("11:30-21:00"),
+          tel: "02-599-1462",
+        },
+        {
+          n: "곽반장",
+          c: "중식",
+          lat: 37.4854224,
+          lng: 126.9811435,
+          menu: "짬뽕, 복짜면, 찹쌀탕수육",
+          note: "옛날식 중국집. 혼밥 손님 많음.",
+          h: W("11:00-21:00"),
+          tel: "02-535-0257",
+        },
+        {
+          n: "홍콩반점0410 이수역점",
+          c: "중식",
+          lat: 37.4858793,
+          lng: 126.9809867,
+          menu: "고기짜장, 군만두",
+          note: "빨리 나옴. 월요일 휴무.",
+          h: [
+            "11:00-22:00",
+            "휴무",
+            "11:00-21:30",
+            "11:00-21:30",
+            "11:00-21:30",
+            "11:00-21:30",
+            "11:00-22:00",
+          ],
+          tel: "02-535-7135",
+        },
+        {
+          n: "월량",
+          c: "중식",
+          lat: 37.4845519,
+          lng: 126.9834121,
+          menu: "새우짜장, 탄탄면, 쯔란 닭날개",
+          note: "조금 고급스러운 중식. 점심은 14:30까지.",
+          h: W("11:30-14:30,17:00-21:00"),
+          tel: "02-6402-0214",
+        },
+        {
+          n: "방배김밥 이수점",
+          c: "분식",
+          lat: 37.488133,
+          lng: 126.9783867,
+          menu: "김밥, 떡볶이",
+          note: "재료 소진 시 일찍 마감. 결제수단 제한 있을 수 있음.",
+          h: [
+            "06:00-14:00",
+            "휴무",
+            "06:00-16:00",
+            "06:00-16:00",
+            "06:00-16:00",
+            "06:00-16:00",
+            "06:00-16:00",
+          ],
+          tel: "02-599-0566",
+        },
+        {
+          n: "주부리",
+          c: "분식",
+          lat: 37.4872155,
+          lng: 126.9835113,
+          menu: "옛날 떡볶이, 쫄면, 컵밥",
+          note: "작은 가게. 월요일 휴무.",
+          h: [
+            "06:00-20:30",
+            "휴무",
+            "06:30-20:30",
+            "06:30-20:30",
+            "06:30-20:30",
+            "06:30-20:30",
+            "06:30-20:30",
+          ],
+          tel: "02-532-8253",
+        },
+        {
+          n: "김밥을주문해",
+          c: "분식",
+          lat: 37.4800734,
+          lng: 126.9814698,
+          menu: "김밥, 쫄면, 갈비만두",
+          note: "사당역 쪽. 빠른 한 끼.",
+          h: W("06:00-21:00"),
+          tel: "02-583-1469",
+        },
+        {
+          n: "통통김밥",
+          c: "분식",
+          lat: 37.4860394,
+          lng: 126.9830638,
+          menu: "김밥 + 국수 세트",
+          note: "간단히 먹기 좋음. 일요일 휴무.",
+          h: [
+            "휴무",
+            "08:00-20:00",
+            "08:00-20:00",
+            "08:00-20:00",
+            "08:00-20:00",
+            "08:00-20:00",
+            "08:00-15:00",
+          ],
+          tel: "02-533-5253",
+        },
+        {
+          n: "김밥나라 (사당로)",
+          c: "분식",
+          lat: 37.4850071,
+          lng: 126.9698089,
+          menu: "소고기김밥, 참치김밥",
+          note: "평일만. 포장 추천.",
+          h: [
+            "휴무",
+            "06:00-17:00",
+            "06:00-17:00",
+            "06:00-17:00",
+            "06:00-17:00",
+            "06:00-17:00",
+            "휴무",
+          ],
+          tel: "02-598-7182",
+        },
+        {
+          n: "국수나무 이수역점",
+          c: "분식",
+          lat: 37.4843975,
+          lng: 126.9804278,
+          menu: "잔치국수, 돈까스, 규동",
+          note: "이수역 9번 출구 쪽. 선결제.",
+          h: W("10:30-21:00"),
+          tel: "02-521-2460",
+        },
+        {
+          n: "방배동쌀국수 이수점",
+          c: "베트남",
+          lat: 37.4851926,
+          lng: 126.97977,
+          menu: "쌀국수, 분짜, 파인애플볶음밥",
+          note: "국물 진한 쌀국수.",
+          h: null,
+          tel: null,
+        },
+        {
+          n: "베트남뚝배기쌀국수",
+          c: "베트남",
+          lat: 37.4868236,
+          lng: 126.9812112,
+          menu: "쌀국수, 반미, 반쎄오",
+          note: "지하 1층. 양 넉넉함.",
+          h: null,
+          tel: null,
+        },
+        {
+          n: "듀블럭 이수역점",
+          c: "양식",
+          lat: 37.4849808,
+          lng: 126.9838905,
+          menu: "리조또, 파스타, 브런치",
+          note: "이수역 5번 출구 근처. 분위기 내는 날.",
+          h: W("10:00-21:00"),
+          tel: "070-8800-4162",
+        },
+        // 패스트푸드
+        {
+          n: "맥도날드 이수역점",
+          c: "패스트푸드",
+          lat: 37.4844319,
+          lng: 126.9804651,
+          menu: "버거 세트, 맥런치",
+          note: "이수역 9번 출구 쪽. 키오스크 주문.",
+          h: W("06:00-25:00"),
+          tel: "02-6743-6200",
+        },
+        {
+          n: "맘스터치 이수점",
+          c: "패스트푸드",
+          lat: 37.4874183,
+          lng: 126.9810064,
+          menu: "싸이버거, 치킨",
+          note: "싸이버거 세트로 빠르게.",
+          h: W("10:00-21:40"),
+          tel: "02-533-6912",
+        },
+        {
+          n: "롯데리아 이수역점",
+          c: "패스트푸드",
+          lat: 37.4883629,
+          lng: 126.9819482,
+          menu: "버거 세트",
+          note: "24시간. 점심 땐 주문 밀릴 수 있음.",
+          h: W("24h"),
+          tel: "02-594-1199",
+        },
+        {
+          n: "써브웨이 사당역점",
+          c: "패스트푸드",
+          lat: 37.4786248,
+          lng: 126.9821366,
+          menu: "샌드위치, 샐러드",
+          note: "사당역 쪽. 15cm면 넉넉히 예산 안.",
+          h: W("08:00-23:00"),
+          tel: "02-6941-0386",
+        },
+        {
+          n: "롯데리아 사당역점",
+          c: "패스트푸드",
+          lat: 37.4768873,
+          lng: 126.9770839,
+          menu: "버거 세트",
+          note: "사당역 쪽.",
+          h: W("09:00-22:00"),
+          tel: "02-588-6866",
+        },
+        {
+          n: "맘스터치 남성역점",
+          c: "패스트푸드",
+          lat: 37.4853959,
+          lng: 126.9698408,
+          menu: "싸이버거, 치킨",
+          note: "남성역 쪽.",
+          h: W("11:00-22:00"),
+          tel: "02-533-7782",
+        },
+        {
+          n: "맘스터치LAB 사당역점",
+          c: "패스트푸드",
+          lat: 37.477408,
+          lng: 126.9820355,
+          menu: "수제 스타일 버거",
+          note: "일반 맘스터치보다 비싼 라인.",
+          h: [
+            "10:00-22:00",
+            "10:00-24:00",
+            "10:00-24:00",
+            "10:00-24:00",
+            "10:00-24:00",
+            "10:00-24:00",
+            "10:00-22:00",
+          ],
+          tel: "0507-1398-3790",
+        },
+        // 일식 추가
+        {
+          n: "후라토식당 이수직영점",
+          c: "일식",
+          lat: 37.4841569,
+          lng: 126.9795354,
+          menu: "일본식 덮밥, 규카츠",
+          note: "회사에서 제일 가까운 편. 평일 점심 14:30까지.",
+          h: [
+            "11:30-22:00",
+            "11:30-14:30,17:00-22:00",
+            "11:30-14:30,17:00-22:00",
+            "11:30-14:30,17:00-22:00",
+            "11:30-14:30,17:00-22:00",
+            "11:30-14:30,17:00-22:00",
+            "11:30-22:00",
+          ],
+          tel: "0507-1474-0547",
+        },
+        {
+          n: "멘쇼우라멘 이수직영점",
+          c: "일식",
+          lat: 37.485772,
+          lng: 126.9808506,
+          menu: "라멘",
+          note: "라멘 땡길 때.",
+          h: W("11:30-21:30"),
+          tel: "0507-1471-9885",
+        },
+        {
+          n: "돈키돈카츠",
+          c: "일식",
+          lat: 37.4825302,
+          lng: 126.9832154,
+          menu: "돈카츠",
+          note: "15:00~16:30 브레이크타임.",
+          h: W("11:30-15:00,16:30-20:30"),
+          tel: "02-599-2747",
+        },
+        {
+          n: "유미카츠 이수방배점",
+          c: "일식",
+          lat: 37.4876111,
+          lng: 126.981006,
+          menu: "돈카츠",
+          note: "돈카츠 전문점.",
+          h: W("11:00-21:00"),
+          tel: "02-595-4481",
+        },
+        // 냉면·백반
+        {
+          n: "육쌈냉면 이수점",
+          c: "국밥·한식",
+          lat: 37.4874339,
+          lng: 126.980404,
+          menu: "냉면 + 숯불고기",
+          note: "냉면에 고기 같이 나오는 세트.",
+          h: W("11:00-22:00"),
+          tel: "02-537-9943",
+        },
+        {
+          n: "경복궁함흥냉면",
+          c: "국밥·한식",
+          lat: 37.4879274,
+          lng: 126.980995,
+          menu: "물냉면, 비빔냉면",
+          note: "함흥냉면 골목 쪽.",
+          h: W("11:00-22:30"),
+          tel: "02-593-4309",
+        },
+        {
+          n: "이수함흥면옥",
+          c: "국밥·한식",
+          lat: 37.487668,
+          lng: 126.9815556,
+          menu: "함흥냉면, 만두",
+          note: "함흥냉면 골목 쪽.",
+          h: W("11:30-21:30"),
+          tel: "02-534-2540",
+        },
+        {
+          n: "이수면옥",
+          c: "국밥·한식",
+          lat: 37.4878521,
+          lng: 126.9818657,
+          menu: "냉면",
+          note: "함흥냉면 골목 쪽.",
+          h: W("11:30-22:00"),
+          tel: null,
+        },
+        {
+          n: "유정우 함흥냉면",
+          c: "국밥·한식",
+          lat: 37.488551,
+          lng: 126.9802877,
+          menu: "함흥냉면",
+          note: "냉면 골목 북쪽 끝.",
+          h: W("11:00-21:00"),
+          tel: "02-3478-0105",
+        },
+        {
+          n: "옹기종기식당",
+          c: "국밥·한식",
+          lat: 37.4886787,
+          lng: 126.9808542,
+          menu: "한식 가정식",
+          note: "집밥 느낌. 일요일 휴무.",
+          h: [
+            "휴무",
+            "10:00-20:00",
+            "10:00-20:00",
+            "10:00-20:00",
+            "10:00-20:00",
+            "10:00-20:00",
+            "10:00-20:00",
+          ],
+          tel: "02-532-7023",
+        },
+        {
+          n: "골목식당",
+          c: "국밥·한식",
+          lat: 37.4832043,
+          lng: 126.9720659,
+          menu: "한식 백반",
+          note: "남성역 방향 골목.",
+          h: null,
+          tel: "02-522-6320",
+        },
+        {
+          n: "우주식당",
+          c: "국밥·한식",
+          lat: 37.484669,
+          lng: 126.9858724,
+          menu: "한식",
+          note: "방배동 쪽.",
+          h: null,
+          tel: "02-584-9080",
+        },
+        // 샐러드
+        {
+          n: "슬로우캘리 사당이수점",
+          c: "샐러드",
+          lat: 37.4843975,
+          lng: 126.9804278,
+          menu: "포케, 샐러드볼",
+          note: "가볍게 먹고 싶을 때.",
+          h: [
+            "11:00-20:30",
+            "11:00-20:30",
+            "11:00-20:30",
+            "11:00-20:30",
+            "11:00-20:30",
+            "11:00-20:30",
+            "11:00-20:30",
+          ],
+          tel: "02-598-3133",
+        },
+        {
+          n: "포케올데이 사당역점",
+          c: "샐러드",
+          lat: 37.4768069,
+          lng: 126.9833009,
+          menu: "포케, 샐러드",
+          note: "사당역 쪽. 토요일 휴무.",
+          h: [
+            "11:00-20:00",
+            "11:00-21:00",
+            "11:00-21:00",
+            "11:00-21:00",
+            "11:00-21:00",
+            "11:00-21:00",
+            "휴무",
+          ],
+          tel: null,
+        },
+        // 회사 바로 앞 추가분
+        {
+          n: "부엌쟁이",
+          c: "국밥·한식",
+          lat: 37.4840764,
+          lng: 126.9799686,
+          menu: "육개장, 오삼불고기, 들깨칼국수",
+          note: "집밥 스타일 한식. 회사에서 아주 가까움.",
+          h: W("11:30-22:00"),
+          tel: "02-6205-3340",
+        },
+        {
+          n: "은연가",
+          c: "국밥·한식",
+          lat: 37.48405,
+          lng: 126.97992,
+          menu: "보쌈 정식, 해물전 정식",
+          note: "부엌쟁이 바로 옆. 일요일 휴무.",
+          h: [
+            "휴무",
+            "11:00-23:45",
+            "11:00-23:45",
+            "11:00-23:45",
+            "11:00-23:45",
+            "11:00-23:45",
+            "11:00-23:45",
+          ],
+          tel: "070-4224-2243",
+        },
+        {
+          n: "단아한정식",
+          c: "국밥·한식",
+          lat: 37.4856189,
+          lng: 126.9807956,
+          menu: "한정식",
+          note: "정식류라 메뉴 잘 보고 고르기.",
+          h: W("11:30-21:30"),
+          tel: "02-532-3945",
+        },
+        {
+          n: "두끼 이수역점",
+          c: "분식",
+          lat: 37.4860168,
+          lng: 126.9809822,
+          menu: "즉석 떡볶이 뷔페",
+          note: "2층. 떡볶이 무한리필.",
+          h: W("11:00-22:00"),
+          tel: "02-6397-2771",
+        },
+        {
+          n: "프레디버거 이수역점",
+          c: "패스트푸드",
+          lat: 37.4841439,
+          lng: 126.9830808,
+          menu: "수제버거",
+          note: "매장컵이면 탄산 리필.",
+          h: W("10:00-27:00"),
+          tel: "02-587-6528",
+        },
+        {
+          n: "은혜식당",
+          c: "국밥·한식",
+          lat: 37.4804094,
+          lng: 126.9830361,
+          menu: "점심 한식뷔페, 제육볶음",
+          note: "점심 뷔페 메뉴가 매일 바뀜. 가성비 좋음.",
+          h: W("11:30-21:30"),
+          tel: "02-597-2566",
+        },
+        {
+          n: "국수가",
+          c: "분식",
+          lat: 37.4831157,
+          lng: 126.972467,
+          menu: "칼국수, 수제비, 들깨칼국수",
+          note: "남성시장 쪽. 일요일 휴무.",
+          h: [
+            "휴무",
+            "11:30-20:00",
+            "11:30-20:00",
+            "11:30-20:00",
+            "11:30-20:00",
+            "11:30-20:00",
+            "11:30-20:00",
+          ],
+          tel: "02-587-3669",
+        },
+      ];
+
+      // 인당 12,000원 기준 가격대 (대표 점심메뉴 기준 추정치)
+      // in = 여유있게 가능, edge = 메뉴 따라 아슬아슬, over = 초과
+      const BUDGET = {
+        국밥장인: "in",
+        "육전국밥 이수역점": "in",
+        "청와옥 사당직영점": "edge",
+        "청담동순도리 사당점": "in",
+        진담식당: "edge",
+        "화설 이수점": "over",
+        "코시 이수점": "edge",
+        스시로로: "edge",
+        경성모밀: "edge",
+        이수짜장: "in",
+        곽반장: "in",
+        "홍콩반점0410 이수역점": "in",
+        월량: "edge",
+        "방배김밥 이수점": "in",
+        주부리: "in",
+        김밥을주문해: "in",
+        통통김밥: "in",
+        "김밥나라 (사당로)": "in",
+        "국수나무 이수역점": "in",
+        "방배동쌀국수 이수점": "edge",
+        베트남뚝배기쌀국수: "edge",
+        "듀블럭 이수역점": "over",
+      };
+      Object.assign(BUDGET, {
+        "맥도날드 이수역점": "in",
+        "맘스터치 이수점": "in",
+        "롯데리아 이수역점": "in",
+        "써브웨이 사당역점": "in",
+        "롯데리아 사당역점": "in",
+        "맘스터치 남성역점": "in",
+        "맘스터치LAB 사당역점": "edge",
+        "후라토식당 이수직영점": "edge",
+        "멘쇼우라멘 이수직영점": "edge",
+        돈키돈카츠: "edge",
+        "유미카츠 이수방배점": "edge",
+        "육쌈냉면 이수점": "in",
+        경복궁함흥냉면: "edge",
+        이수함흥면옥: "edge",
+        이수면옥: "edge",
+        "유정우 함흥냉면": "edge",
+        옹기종기식당: "in",
+        골목식당: "in",
+        우주식당: "in",
+        "슬로우캘리 사당이수점": "edge",
+        "포케올데이 사당역점": "edge",
+        부엌쟁이: "edge",
+        은연가: "edge",
+        단아한정식: "edge",
+        "두끼 이수역점": "edge",
+        "프레디버거 이수역점": "edge",
+        은혜식당: "in",
+        국수가: "in",
+      });
+      const BUDGET_TXT = {
+        in: "예산 OK",
+        edge: "메뉴 따라 아슬",
+        over: "예산 초과",
+      };
+      R.forEach((r) => {
+        r.b = BUDGET[r.n] || "edge";
+      });
+
+      function dist(a, b) {
+        const toR = (x) => (x * Math.PI) / 180,
+          Rr = 6371000;
+        const dLat = toR(b.lat - a.lat),
+          dLng = toR(b.lng - a.lng);
+        const s =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.sin(dLng / 2) ** 2;
+        return 2 * Rr * Math.asin(Math.sqrt(s));
+      }
+      R.forEach((r, i) => {
+        r.id = i;
+        r.d = Math.round(dist(OFFICE, r));
+        r.walk = Math.max(1, Math.round((r.d * 1.3) / 75));
+      });
+      R.sort((a, b) => a.d - b.d);
+
+      const toMin = (t) => {
+        const [h, m] = t.split(":").map(Number);
+        return h * 60 + m;
+      };
+      function status(r, now = new Date()) {
+        if (!r.h) return { k: "unknown", t: "영업시간 확인 필요" };
+        const s = r.h[now.getDay()];
+        if (s === "휴무") return { k: "closed", t: "오늘 휴무" };
+        if (s === "24h") return { k: "open", t: "24시간 영업" };
+        // "11:30-15:00,16:30-20:30" 처럼 브레이크타임 있는 경우도 처리
+        const cur = now.getHours() * 60 + now.getMinutes();
+        const ranges = s.split(",").map((x) => x.split("-"));
+        for (const [a, b] of ranges) {
+          if (cur >= toMin(a) && cur < toMin(b))
+            return {
+              k: "open",
+              t: `영업중 · ${b > "24" ? String((toMin(b) / 60 - 24) | 0).padStart(2, "0") + b.slice(2) : b}까지`,
+            };
+        }
+        const next = ranges.find(([a]) => cur < toMin(a));
+        if (next)
+          return {
+            k: "closed",
+            t:
+              ranges[0][0] === next[0]
+                ? `${next[0]} 오픈`
+                : `브레이크 · ${next[0]} 재오픈`,
+          };
+        return { k: "closed", t: "영업 종료" };
+      }
+
+      // 지도
+      const map = L.map("map", {
+        zoomControl: true,
+        attributionControl: true,
+      }).setView([OFFICE.lat, OFFICE.lng], 16);
+      const mapEl = document.getElementById("map"),
+        tilenote = document.getElementById("tilenote"),
+        sketchBtn = document.getElementById("sketchBtn");
+      let loaded = 0,
+        failed = 0,
+        sketchOn = false,
+        sketchLayer = null;
+
+      // 배경 타일
+      // ※ CARTO: 키 없으면 "API KEY REQUIRED" 이미지 / Esri: 한국 상세 데이터 없음("Map data not yet available")
+      //   → 둘 다 정상 응답(200)이라 tileerror가 안 뜸. 한국 지도가 제대로 나오는 V월드를 기본으로.
+      const BASES = {
+        "V월드 (한글)": L.tileLayer(
+          "https://xdworld.vworld.kr/2d/Base/service/{z}/{x}/{y}.png",
+          {
+            minZoom: 6,
+            maxZoom: 19,
+            attribution:
+              '&copy; <a href="https://www.vworld.kr" target="_blank" rel="noopener">V월드</a> (국토교통부)',
+          },
+        ),
+        OpenStreetMap: L.tileLayer(
+          "https://tile.openstreetmap.de/{z}/{x}/{y}.png",
+          {
+            maxZoom: 19,
+            attribution:
+              '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors',
+          },
+        ),
+      };
+      let tiles = BASES["V월드 (한글)"].addTo(map);
+      Object.values(BASES).forEach((t) => {
+        t.on("tileload", () => {
+          loaded++;
+        });
+        t.on("tileerror", () => {
+          failed++;
+          if (failed > 2 && loaded === 0) sketch();
+        });
+      });
+      const layerCtl = L.control
+        .layers(BASES, null, { collapsed: false, position: "bottomleft" })
+        .addTo(map);
+      map.on("baselayerchange", (e) => {
+        tiles = e.layer;
+      });
+      setTimeout(() => {
+        if (loaded === 0) sketch();
+      }, 3500);
+
+      const cssv = (v) =>
+        getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+      function buildSketch() {
+        const g = L.layerGroup();
+        const edge = cssv("--road-edge"),
+          road = cssv("--road");
+        [
+          {
+            name: "동작대로",
+            w: 14,
+            pts: [
+              [37.4735, 126.9814],
+              [37.4765, 126.9816],
+              [37.481, 126.9817],
+              [37.4855, 126.9818],
+              [37.4905, 126.9822],
+            ],
+            at: [37.48, 126.9826],
+          },
+          {
+            name: "사당로",
+            w: 11,
+            pts: [
+              [37.4852, 126.966],
+              [37.4847, 126.971],
+              [37.484, 126.975],
+              [37.4838, 126.9784],
+              [37.4842, 126.98],
+              [37.485, 126.9818],
+            ],
+            at: [37.4833, 126.9752],
+          },
+          {
+            name: "방배로",
+            w: 9,
+            pts: [
+              [37.485, 126.9818],
+              [37.4848, 126.985],
+              [37.4846, 126.989],
+            ],
+            at: [37.4841, 126.9868],
+          },
+        ].forEach((r) => {
+          L.polyline(r.pts, {
+            color: edge,
+            weight: r.w + 3,
+            interactive: false,
+            lineCap: "round",
+          }).addTo(g);
+          L.polyline(r.pts, {
+            color: road,
+            weight: r.w,
+            interactive: false,
+            lineCap: "round",
+          }).addTo(g);
+          L.marker(r.at, {
+            interactive: false,
+            keyboard: false,
+            icon: L.divIcon({
+              className: "road-label",
+              html: r.name,
+              iconSize: [60, 14],
+              iconAnchor: [30, 7],
+            }),
+          }).addTo(g);
+        });
+        [
+          ["이수역", 37.4862, 126.9818],
+          ["사당역", 37.4765, 126.9816],
+          ["남성역", 37.4846, 126.971],
+        ].forEach(([n, la, ln]) => {
+          L.marker([la, ln], {
+            interactive: false,
+            keyboard: false,
+            zIndexOffset: -500,
+            icon: L.divIcon({
+              className: "",
+              html: `<span class="stn">${n}</span>`,
+              iconSize: [0, 0],
+            }),
+          }).addTo(g);
+        });
+        return g;
+      }
+
+      function sketch() {
+        if (sketchOn) return;
+        sketchOn = true;
+        if (map.hasLayer(tiles)) map.removeLayer(tiles);
+        layerCtl.getContainer().hidden = true;
+        mapEl.classList.add("sketch");
+        tilenote.hidden = false;
+        if (!sketchLayer) sketchLayer = buildSketch();
+        sketchLayer.addTo(map);
+        sketchBtn.textContent = "실제 지도로 보기";
+        sketchBtn.setAttribute("aria-pressed", "true");
+      }
+      function unsketch() {
+        if (!sketchOn) return;
+        sketchOn = false;
+        if (sketchLayer) map.removeLayer(sketchLayer);
+        mapEl.classList.remove("sketch");
+        tilenote.hidden = true;
+        tiles.addTo(map);
+        layerCtl.getContainer().hidden = false;
+        sketchBtn.textContent = "간이 약도로 보기";
+        sketchBtn.setAttribute("aria-pressed", "false");
+      }
+      // 타일 서버가 또 에러 이미지를 정상 응답으로 줄 때를 대비한 수동 전환
+      sketchBtn.onclick = () => {
+        sketchOn ? unsketch() : sketch();
+      };
+
+      const WALK_R = Math.round((10 * 75) / 1.3); // 도보 10분 ≈ 577m
+      L.circle([OFFICE.lat, OFFICE.lng], {
+        radius: WALK_R,
+        color: cssv("--accent") || "#1f6b4c",
+        weight: 1.5,
+        dashArray: "5 6",
+        fill: false,
+        interactive: false,
+      }).addTo(map);
+      L.marker([OFFICE.lat, OFFICE.lng], {
+        icon: L.divIcon({
+          className: "",
+          html: '<div class="office">회사</div>',
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
+        }),
+        zIndexOffset: 1000,
+      })
+        .addTo(map)
+        .bindPopup(
+          '<div class="pop"><h3>한국소프트웨어서비스</h3><p>사당로 276 성보빌딩</p><p style="color:var(--muted)">점선 원 = 도보 약 10분 (577m)</p></div>',
+        );
+
+      const pinIcon = (r, big) =>
+        L.divIcon({
+          className: "",
+          html: `<div class="pin${big ? " big" : ""}" style="background:${CATS[r.c]}"><span>${CAT_SHORT[r.c]}</span></div>`,
+          iconSize: big ? [38, 38] : [28, 28],
+          iconAnchor: big ? [19, 38] : [14, 28],
+          popupAnchor: [0, big ? -36 : -26],
+        });
+
+      function popupHtml(r) {
+        const st = status(r),
+          q = encodeURIComponent(r.n.replace(/\s*\(.*\)/, "") + " 사당");
+        return `<div class="pop"><h3>${r.n}</h3>
+    <p>${r.c} · ${r.menu}</p>
+    <p>${r.note}</p>
+    <p><span class="state ${st.k}">${st.t}</span> · 도보 약 ${r.walk}분 (${r.d}m)</p>
+    <p><span class="bud ${r.b}">${BUDGET_TXT[r.b]}</span> <span style="color:var(--muted)">(인당 12,000원 기준 추정)</span></p>
+    ${r.tel ? `<p>전화 <span style="user-select:all">${r.tel}</span></p>` : ""}
+    <div class="links">
+      <a href="https://map.naver.com/p/search/${q}" target="_blank" rel="noopener">네이버지도</a>
+      <a href="https://map.kakao.com/?q=${q}" target="_blank" rel="noopener">카카오맵</a>
+    </div></div>`;
+      }
+
+      const markers = {};
+      R.forEach((r) => {
+        markers[r.id] = L.marker([r.lat, r.lng], {
+          icon: pinIcon(r, false),
+        }).bindPopup(popupHtml(r), { maxWidth: 260 });
+        markers[r.id].on("click", () => select(r.id, false));
+      });
+
+      // 필터
+      let cat = "전체",
+        openOnly = false,
+        budgetOnly = true,
+        maxWalk = 10,
+        activeId = null,
+        pickedId = null;
+      const walkset = document.getElementById("walkset");
+      [
+        [5, "5분"],
+        [7, "7분"],
+        [10, "10분"],
+        [99, "전체"],
+      ].forEach(([v, t]) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "chip sm";
+        b.textContent = v === 99 ? t : `${t} 이내`;
+        b.setAttribute("aria-pressed", v === maxWalk);
+        b.onclick = () => {
+          maxWalk = v;
+          walkset
+            .querySelectorAll(".chip")
+            .forEach((x) => x.setAttribute("aria-pressed", x === b));
+          render();
+          fitVisible();
+        };
+        walkset.appendChild(b);
+      });
+      document.getElementById("budgetOnly").onchange = (e) => {
+        budgetOnly = e.target.checked;
+        render();
+      };
+      const chips = document.getElementById("chips");
+      ["전체", ...Object.keys(CATS)].forEach((c) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "chip";
+        b.textContent = c;
+        b.setAttribute("aria-pressed", c === cat);
+        b.onclick = () => {
+          cat = c;
+          chips
+            .querySelectorAll(".chip")
+            .forEach((x) => x.setAttribute("aria-pressed", x === b));
+          render();
+        };
+        chips.appendChild(b);
+      });
+      document.getElementById("openOnly").onchange = (e) => {
+        openOnly = e.target.checked;
+        render();
+      };
+
+      function visible() {
+        return R.filter(
+          (r) =>
+            (cat === "전체" || r.c === cat) &&
+            (!openOnly || status(r).k === "open") &&
+            (!budgetOnly || r.b !== "over") &&
+            r.walk <= maxWalk,
+        );
+      }
+
+      function render() {
+        const v = visible(),
+          ids = new Set(v.map((r) => r.id));
+        R.forEach((r) => {
+          const m = markers[r.id];
+          if (ids.has(r.id)) {
+            if (!map.hasLayer(m)) m.addTo(map);
+          } else if (map.hasLayer(m)) map.removeLayer(m);
+        });
+        document.getElementById("count").textContent =
+          `${v.length}곳 · 가까운 순`;
+        const list = document.getElementById("list");
+        list.innerHTML = "";
+        if (!v.length) {
+          list.innerHTML =
+            '<div class="count" style="padding:12px 2px">조건에 맞는 곳이 없어. 필터를 풀어봐.</div>';
+          return;
+        }
+        v.forEach((r) => {
+          const st = status(r);
+          const el = document.createElement("button");
+          el.type = "button";
+          el.className =
+            "item" +
+            (r.id === activeId ? " active" : "") +
+            (r.id === pickedId ? " picked" : "");
+          el.dataset.id = r.id;
+          el.innerHTML = `<div class="dot" style="background:${CATS[r.c]}">${CAT_SHORT[r.c]}</div>
+      <div style="min-width:0"><div class="name">${r.n}</div>
+      <div class="meta"><span>${r.menu}</span><span class="state ${st.k}">${st.t}</span><span class="bud ${r.b}">${BUDGET_TXT[r.b]}</span></div></div>
+      <div class="walk">${r.walk}분<small>${r.d}m</small></div>`;
+          el.onclick = () => select(r.id, true);
+          list.appendChild(el);
+        });
+      }
+
+      function select(id, fly) {
+        activeId = id;
+        const r = R.find((x) => x.id === id);
+        if (fly)
+          map.flyTo([r.lat, r.lng], 17, {
+            duration: matchMedia("(prefers-reduced-motion:reduce)").matches
+              ? 0
+              : 0.6,
+          });
+        markers[id].openPopup();
+        document
+          .querySelectorAll(".item")
+          .forEach((e) => e.classList.toggle("active", +e.dataset.id === id));
+        const el = document.querySelector(`.item[data-id="${id}"]`);
+        if (el) el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+
+      // 랜덤 추천: 지금 영업중(또는 정보 없음)인 곳 중에서
+      document.getElementById("pick").onclick = () => {
+        let pool = visible().filter((r) => status(r).k !== "closed");
+        if (!pool.length) pool = visible();
+        if (!pool.length) return;
+        const reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
+        const final = pool[Math.floor(Math.random() * pool.length)];
+        let i = 0,
+          steps = reduce ? 0 : 12;
+        const btn = document.getElementById("pick");
+        btn.disabled = true;
+        const tick = () => {
+          if (i < steps) {
+            const r = pool[Math.floor(Math.random() * pool.length)];
+            btn.textContent = r.n;
+            i++;
+            setTimeout(tick, 60 + i * 12);
+            return;
+          }
+          if (pickedId != null && markers[pickedId])
+            markers[pickedId].setIcon(
+              pinIcon(
+                R.find((x) => x.id === pickedId),
+                false,
+              ),
+            );
+          pickedId = final.id;
+          markers[final.id].setIcon(pinIcon(final, true));
+          render();
+          select(final.id, true);
+          btn.textContent = "다시 골라줘";
+          btn.disabled = false;
+        };
+        tick();
+      };
+
+      function fitVisible() {
+        const v = visible();
+        if (!v.length) return;
+        const b = L.latLngBounds(
+          v.map((r) => [r.lat, r.lng]).concat([[OFFICE.lat, OFFICE.lng]]),
+        );
+        map.fitBounds(b, { padding: [30, 30], maxZoom: 17 });
+      }
+      render();
+      fitVisible();
+      setInterval(render, 60000);
+    </script>
+  </body>
+</html>
